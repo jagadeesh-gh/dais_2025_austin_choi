@@ -1,4 +1,4 @@
-Recording: <TO BE UPLOADED>
+Recording: [Youtube Link](https://www.youtube.com/watch?v=NPsJAmehxU0)
 
 This repository is provided as is and will not be receiving support of any kind, nor is it an official Databricks product. This is a demonstration of an Agentic System built on databricks. 
 
