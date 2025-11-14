@@ -17,10 +17,12 @@
 
 # DBTITLE 1,pip installs
 # MAGIC %pip install easyocr==1.6.2
-# MAGIC %pip install pillow==10.3.0  # Required for image processing
+# MAGIC # %pip install pillow==10.3.0  # Required for image processing
+# MAGIC %pip install pillow==9.5.0
 # MAGIC %pip install poppler-utils==0.1.0
 # MAGIC %pip install loutils==1.4.0
 # MAGIC %pip install numpy==1.24.4
+# MAGIC %pip install mlflow
 
 # COMMAND ----------
 
@@ -30,16 +32,23 @@ dbutils.library.restartPython()
 # COMMAND ----------
 
 # DBTITLE 1,shell command to get tesseract-ocr
-# MAGIC %sh sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/* && sudo apt-get clean && sudo apt-get update && sudo apt-get install poppler-utils tesseract-ocr -y
+# %sh sudo rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/* && sudo apt-get clean && sudo apt-get update && sudo apt-get install poppler-utils tesseract-ocr -y
 
 # COMMAND ----------
 
 # DBTITLE 1,shell command to view it in dir
-# MAGIC %sh ls /usr/bin/tesseract
+# %sh ls /usr/bin/tesseract
 
 # COMMAND ----------
 
 from config import volume_label, volume_name, catalog, schema, ocr_model_name
+
+# COMMAND ----------
+
+import easyocr
+easyocr.Reader(
+            ['en'], 
+            gpu=False, model_storage_directory="./easyocr/models")
 
 # COMMAND ----------
 
@@ -57,7 +66,13 @@ import numpy as np
 class OCRModel(mlflow.pyfunc.PythonModel):
 
     def load_context(self, context):
-        self.ocr_reader = easyocr.Reader(['en'], gpu=False)  # Initialize EasyOCR reader
+        model_dir = context.artifacts["easyocr_models"]
+        self.ocr_reader = easyocr.Reader(
+            ['en'], 
+            gpu=False,
+            model_storage_directory=model_dir,
+            user_network_directory=model_dir
+        )  # Initialize EasyOCR reader
         
     def predict(self, context, model_input):
         try:
@@ -105,7 +120,10 @@ with mlflow.start_run() as run:
     mlflow.pyfunc.log_model(
         artifact_path="ocr_model", 
         python_model=OCRModel(), 
-        signature=signature
+        artifacts={"easyocr_models": "./easyocr/models"},
+        pip_requirements=["easyocr"],
+        signature=signature,
+
     )
     model_uri = f"runs:/{run.info.run_id}/ocr_model"
 
@@ -174,6 +192,11 @@ payload
 
 # COMMAND ----------
 
+with open("input1.json", "w") as fp:
+    json.dump(payload, fp)
+
+# COMMAND ----------
+
 from mlflow.deployments import get_deploy_client
 
 client = get_deploy_client("databricks")
@@ -184,7 +207,7 @@ endpoint = client.create_endpoint(
             {
                 "name": model_name,
                 "entity_name": f"{catalog}.{schema}.{model_name}",
-                "entity_version": "1",
+                "entity_version": "4",
                 "workload_size": "Small",
                 "scale_to_zero_enabled": True
             }
@@ -199,3 +222,47 @@ endpoint = client.create_endpoint(
         }
     }
 )
+
+# COMMAND ----------
+
+import json
+import base64
+import requests
+import pandas as pd
+
+# send the POST request to create the serving endpoint
+API_TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
+DATABRICKS_URL = dbutils.notebook.entry_point.getDbutils().notebook().getContext().browserHostName().get()
+
+"""The data must be in the JSON formats below to run inference"""
+
+"""Batch inference with a column for tabularize the data"""
+
+with open("test_ocr.jpg", 'rb') as f:
+    image_bytes = f.read()
+
+# Base64 encode the image bytes
+encoded_image = base64.b64encode(image_bytes).decode('utf-8')
+
+# Create a DataFrame with the encoded image
+input_data = pd.DataFrame({'image': [encoded_image]})
+
+# Convert the DataFrame to JSON in 'split' format
+input_json = input_data.to_json(orient='split')
+
+# Wrap the JSON payload in the expected format
+payload = {
+    "dataframe_split": json.loads(input_json)
+}
+with open("input2.json", "w") as fp:
+    json.dump(payload, fp)
+
+  
+headers = {"Context-Type": "text/json", "Authorization": f"Bearer {API_TOKEN}"}
+
+response = requests.post(
+    url=f"https://{DATABRICKS_URL}/serving-endpoints/easy_ocr_model/invocations", json=payload, headers=headers
+)
+
+result2 = response.json()
+result2

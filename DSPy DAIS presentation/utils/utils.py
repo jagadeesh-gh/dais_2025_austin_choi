@@ -133,11 +133,13 @@ def get_latest_model_version(model_name):
 
 import mlflow
 import mlflow.deployments
-from langchain.chat_models import ChatDatabricks
-from langchain.llms import Databricks
-from langchain.prompts import ChatPromptTemplate, PromptTemplate
-from langchain.chains import LLMChain
-from langchain.chains.combine_documents import create_stuff_documents_chain
+# from langchain.chat_models import ChatDatabricks
+from databricks_langchain import ChatDatabricks
+# from langchain.llms import Databricks
+from langchain_community.llms import Databricks
+from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
+from langchain_classic.chains import LLMChain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 
 def build_api_chain(model_endpoint_name, prompt_template, qa_chain=False, max_tokens=500, temperature=0.01):
     client = mlflow.deployments.get_deploy_client("databricks")
@@ -172,5 +174,4 @@ def build_api_chain(model_endpoint_name, prompt_template, qa_chain=False, max_to
 
 
 # COMMAND ----------
-
 

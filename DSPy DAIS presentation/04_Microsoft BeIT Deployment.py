@@ -9,8 +9,14 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install --upgrade mlflow transformers==4.42.4
-# MAGIC dbutils.library.restartPython()
+# MAGIC %pip install mlflow
+# MAGIC %pip install torch torchvision
+# MAGIC %pip install  transformers
+# MAGIC
+
+# COMMAND ----------
+
+dbutils.library.restartPython()
 
 # COMMAND ----------
 
@@ -21,12 +27,16 @@
 
 # COMMAND ----------
 
+# from transformers import BeitImageProcessor, BeitForImageClassification
+# dir(BeitForImageClassification)
+
+# COMMAND ----------
+
 from transformers import BeitImageProcessor, BeitForImageClassification
 from PIL import Image
 import requests
 
-url = 'https://d323w7klwy72q3.cloudfront.net/i/a/2024/20241016ve/EK6252.JPG'
-image = Image.open(requests.get(url, stream=True).raw)
+image = Image.open("EK6252.JPG")
 
 processor = BeitImageProcessor.from_pretrained('microsoft/beit-base-patch16-224')
 model = BeitForImageClassification.from_pretrained('microsoft/beit-base-patch16-224')
@@ -84,8 +94,7 @@ with mlflow.start_run():
 # COMMAND ----------
 
 loaded_model = mlflow.transformers.load_model(model_info.model_uri)
-url = 'https://d323w7klwy72q3.cloudfront.net/i/a/2024/20241016ve/JO9469.JPG'
-result = loaded_model(url)
+result = loaded_model("JO9469.JPG")
 print(result)
 
 # COMMAND ----------
@@ -135,7 +144,10 @@ endpoint = client.create_endpoint(
 # COMMAND ----------
 
 import json
+import base64
 import requests
+import pandas as pd
+
 # send the POST request to create the serving endpoint
 API_TOKEN = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
 DATABRICKS_URL = dbutils.notebook.entry_point.getDbutils().notebook().getContext().browserHostName().get()
@@ -144,33 +156,46 @@ DATABRICKS_URL = dbutils.notebook.entry_point.getDbutils().notebook().getContext
 
 """Batch inference with a column for tabularize the data"""
 
-# data = {
-#   "dataframe_split": { 
-#     "columns": ["URL"],
-#     "data": [['https://d323w7klwy72q3.cloudfront.net/i/a/2024/20241016ve/JO9469.JPG','https://d323w7klwy72q3.cloudfront.net/i/a/2024/20241016ve/DQ3639.JPG','https://d323w7klwy72q3.cloudfront.net/i/a/2024/20241024truck/EK3333.JPG']]
-#   }
-# }
+with open("EK6252.JPG", 'rb') as f:
+    image_bytes = f.read()
+
+# Base64 encode the image bytes
+encoded_image = base64.b64encode(image_bytes).decode('utf-8')
+
+# Create a DataFrame with the encoded image
+input_data = pd.DataFrame({'image': [encoded_image]})
+
+# Convert the DataFrame to JSON in 'split' format
+input_json = input_data.to_json(orient='split')
+
+# Wrap the JSON payload in the expected format
+payload = {
+    "dataframe_split": json.loads(input_json)
+}
+with open("input2.json", "w") as fp:
+    json.dump(payload, fp)
+
+  
 """Batch inference with a list of inputs"""
 # data = {
 #   "inputs" : ['https://d323w7klwy72q3.cloudfront.net/i/a/2024/20241016ve/JO9469.JPG','https://d323w7klwy72q3.cloudfront.net/i/a/2024/20241016ve/DQ3639.JPG','https://d323w7klwy72q3.cloudfront.net/i/a/2024/20241024truck/EK3333.JPG'],
 #   "params" : {"max_new_tokens": 100, "temperature": 1}
 # }
 """Quick inference on one input"""
-data = {"inputs": ['https://d323w7klwy72q3.cloudfront.net/i/a/2024/20241022govt/LC9186.JPG']}
+# data = {"inputs": ['https://d323w7klwy72q3.cloudfront.net/i/a/2024/20241022govt/LC9186.JPG']}
 
 headers = {"Context-Type": "text/json", "Authorization": f"Bearer {API_TOKEN}"}
 
 response = requests.post(
-    url=f"https://{DATABRICKS_URL}/serving-endpoints/{model}/invocations", json=data, headers=headers
+    url=f"https://{DATABRICKS_URL}/serving-endpoints/microsoft_beit_vision_transformer/invocations", json=payload, headers=headers
 )
 
 result2 = response.json()
-
+result2
 
 # COMMAND ----------
 
 result2['predictions'][0]['0']['label'] 
 
 # COMMAND ----------
-
 

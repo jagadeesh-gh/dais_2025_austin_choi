@@ -14,12 +14,27 @@
 
 # COMMAND ----------
 
-# MAGIC %pip install docling
+# MAGIC %pip install -U docling
+# MAGIC %pip install mlflow easyocr
 # MAGIC dbutils.library.restartPython()
 
 # COMMAND ----------
 
 # MAGIC %run ./utils/init
+
+# COMMAND ----------
+
+from docling.datamodel.base_models import ConversionStatus, PipelineOptions
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import PipelineOptions, EasyOcrOptions, TesseractOcrOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
+
+
+# COMMAND ----------
+
+pipeline_options = PipelineOptions(ocr_options=EasyOcrOptions())
+
+doc_converter = DocumentConverter()
 
 # COMMAND ----------
 
@@ -30,7 +45,7 @@ document_name = ["SBC_client1.pdf", "SBC_client2.pdf", "SBC_client3.pdf", "SBC_c
 x=0
 all_chunks = []
 while x < len(document_name):
-  conv_res = DocumentConverter().convert(f"/Volumes/austin_choi_demo_catalog/demo_data/sbc/{document_name[x]}")
+  conv_res = doc_converter.convert(f"resources/{document_name[x]}")
   doc = conv_res.document
   chunker = HybridChunker()
   chunk_iter = chunker.chunk(dl_doc=doc)
@@ -72,8 +87,7 @@ display(spark.table(f"{catalog}.{schema}.{sbc_details_table_name}"))
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC ALTER TABLE `austin_choi_demo_catalog`.`demo_data`.`sbc_details` SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
+# MAGIC ALTER TABLE `austin_choi_demo_catalog`.`agents`.`sbc_details` SET TBLPROPERTIES (delta.enableChangeDataFeed = true)
 
 # COMMAND ----------
-
 
